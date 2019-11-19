@@ -1,0 +1,60 @@
+| dbxquery 
+connection=ynhh
+query="
+SELECT a.POLICY_NAME,
+       a.COMMENTS,
+       COALESCE(b.CALLS,0) as CALLS
+FROM
+(
+SELECT distinct POLICY_NAME, 
+       COMMENTS
+FROM
+(
+SELECT  ap.POLICY_NAME,
+        SUBSTR(COMMENTS,1,13) as COMMENTS
+FROM    ADP_POLICY ap INNER JOIN ADP_POLICY_RULES apr ON ap.OID=apr.POLICY_OID
+WHERE
+        ap.STATE = 'A' AND
+        (ap.POLICY_STATE = 2 OR ap.POLICY_STATE = 7) AND
+        (ap.POLICY_NAME <> 'Default' AND 
+        ap.POLICY_NAME NOT LIKE '%Test%' AND
+        ap.POLICY_NAME NOT LIKE '%Old%') AND
+        apr.COMMENTS LIKE 'Total%Inbound%'
+) r
+) a LEFT OUTER JOIN
+(
+SELECT POLICY_NAME, 
+       SUBSTR(COMMENTS,1,13) as COMMENTS,
+       COALESCE(SUM(TOTAL_VALUE),0) as CALLS
+FROM
+(
+SELECT ap.POLICY_NAME,
+              apr.COMMENTS, 
+        al.INTERVAL_START_TIME as interval_start_time,
+        CASE
+          WHEN 'CNT'='CNT' THEN al.COMPLETED_COUNT + al.CURRENT_COUNT
+          ELSE ROUND((al.COMPLETED_DURATION + al.CURRENT_DURATION)/1000/60,1)
+        END as TOTAL_VALUE,
+        CASE
+          WHEN 'CNT'='CNT' THEN ar.COUNT
+          ELSE ROUND(ar.DURATION/1000/60,1)
+        END as TOTAL_THRESH
+FROM (((ADP_LOG al INNER JOIN ADP_POLICY ap ON al.policy_oid = ap.oid)
+        INNER JOIN ADP_POLICY_RULES apr ON (al.policy_oid = apr.policy_oid AND al.rule_oid=apr.rule_oid))
+        INNER JOIN ADP_RULES ar on (apr.rule_oid = ar.oid AND apr.version = ar.version))
+WHERE   
+        CASE
+          WHEN 'No%20Stage' = utl_url.escape('No Stage') AND apr.COMMENTS LIKE 'Total%Inbound%' THEN 1
+          WHEN 'No%20Stage' = utl_url.escape('Stage 1')  AND (apr.COMMENTS LIKE 'Total%Inbound%' AND NOT apr.COMMENTS LIKE '%Stage%2%') THEN 1
+           WHEN 'No%20Stage' = utl_url.escape('Stage 2')  AND (apr.COMMENTS LIKE 'Total%Inbound%' AND NOT apr.COMMENTS LIKE '%Stage%1%') THEN 1
+          ELSE 0
+         END=1 AND
+        interval_start_time BETWEEN TRUNC(SYSDATE - 1) AND TRUNC(SYSDATE)
+ORDER BY apr.COMMENTS, al.INTERVAL_START_TIME
+) b
+GROUP BY POLICY_NAME, SUBSTR(COMMENTS,1,13)
+) b ON a.POLICY_NAME=b.POLICY_NAME AND a.COMMENTS=b.COMMENTS
+"
+shortnames=t
+| table POLICY_NAME COMMENTS CALLS
+| search CALLS=0
