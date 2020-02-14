@@ -1,0 +1,1 @@
+| dbxquery connection=Academy query="SELECT 'tunnel-up' as status FROM dual"
