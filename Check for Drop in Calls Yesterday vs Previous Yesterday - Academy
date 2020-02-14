@@ -1,0 +1,40 @@
+| dbxquery 
+connection=Academy
+timeout=1800
+maxrows=10
+query="
+SELECT 
+       'Academy' as customer_name,
+       a.yesterday_date,
+       a.calls as yesterday,
+       b.calls as last_week,
+       CASE 
+         WHEN a.calls=0 AND b.calls=0 THEN 0
+         WHEN a.calls <> 0 AND b.calls=0 THEN -100
+         ELSE ROUND((a.calls-b.calls)/b.calls,4)*100
+      END as perc_diff 
+FROM
+(
+SELECT 'join' as joinme, 
+       TO_CHAR(TRUNC(SYSDATE - 1),'YYYY-MM-DD') as yesterday_date, 
+       COUNT(c.call_oid) as calls
+FROM   call c LEFT OUTER JOIN terminations x ON c.call_oid=x.call_oid
+WHERE  c.end_time BETWEEN TRUNC(SYSDATE - 1) AND TRUNC(SYSDATE) AND
+       x.disposition IS NULL
+) a INNER JOIN
+(
+SELECT 'join' as joinme, COUNT(c.call_oid) as calls
+FROM   call c LEFT OUTER JOIN terminations x ON c.call_oid=x.call_oid
+WHERE  c.end_time BETWEEN TRUNC(SYSDATE - 8) AND TRUNC(SYSDATE - 7) AND
+       x.disposition IS NULL
+) b ON a.joinme=b.joinme
+" shortnames=t
+| eval perf_diff2=PERC_DIFF."%"
+| join type=left YESTERDAY_DATE
+[
+| inputlookup holiday_schedule.csv
+| rename date as YESTERDAY_DATE holiday as HOLIDAY
+]
+| table CUSTOMER_NAME YESTERDAY_DATE YESTERDAY LAST_WEEK PERC_DIFF PERC_DIFF HOLIDAY
+| fillnull value=NO HOLIDAY
+| search PERC_DIFF < -50 AND HOLIDAY="NO"
