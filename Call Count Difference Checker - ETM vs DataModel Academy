@@ -1,0 +1,33 @@
+| dbxquery 
+timeout=1800
+maxrows=1
+connection=Academy 
+query="
+SELECT 'myjoin' myjoin, 
+        count(call_oid) as etm_calls
+FROM   call c 
+WHERE  start_time >= trunc(sysdate-1) AND
+       start_time  < trunc(sysdate) AND
+       c.call_flags <> 'CDRIMPORTED'
+"
+shortnames=t
+| rename MYJOIN as myjoin ETM_CALLS as etm_calls
+| join type=left myjoin
+[
+| dbxquery 
+timeout=1800
+maxrows=1
+connection=dw_academy 
+query="
+SELECT 'myjoin' myjoin, 
+       count(call_oid) as pg_calls
+FROM   dw_fk_datawarehouse_nomodel c
+WHERE  datekey >= current_date - 1 AND
+       datekey  < current_date
+"
+shortnames=t
+]
+| eval call_diff=etm_calls-pg_calls
+| eval call_diff_perc=ROUND(call_diff/etm_calls,3)*100
+| table etm_calls pg_calls call_diff call_diff_perc
+| where call_diff_perc > 1
