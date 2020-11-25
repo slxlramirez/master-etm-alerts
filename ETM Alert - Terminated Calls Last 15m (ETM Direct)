@@ -1,5 +1,5 @@
 | dbxquery 
-connection=hca 
+connection=loudoun
 query="
 select *
 from
@@ -28,6 +28,7 @@ pivot
 " shortnames=t
 | table *
 | rename 'ALLOWED' as allowed 'TERMINATED' as terminated
+| fillnull value=0 terminated allowed
 | eval total=allowed+terminated
 | eval perc_terminated=(terminated/total)*100
 | table allowed terminated total perc_terminated
