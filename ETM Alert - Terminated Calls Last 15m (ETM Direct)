@@ -1,0 +1,33 @@
+| dbxquery 
+connection=hca 
+query="
+select *
+from
+(
+SELECT   CASE
+            WHEN x.DISPOSITION = 0 THEN 'TERMINATED'
+            WHEN x.DISPOSITION = 1 THEN 'TERMINATED'
+            WHEN x.DISPOSITION = 2 THEN 'TERMINATED'
+            ELSE 'ALLOWED'
+         END as term_status,
+         COUNT(c.call_oid) as calls
+FROM     active_call c LEFT OUTER JOIN active_terminations x ON c.call_oid=x.call_oid
+WHERE    END_TIME >= sysdate-1/24/4 AND
+         END_TIME  < sysdate
+GROUP BY CASE
+            WHEN x.DISPOSITION = 0 THEN 'TERMINATED'
+            WHEN x.DISPOSITION = 1 THEN 'TERMINATED'
+            WHEN x.DISPOSITION = 2 THEN 'TERMINATED'
+            ELSE 'ALLOWED'
+         END
+)
+pivot
+(sum(CALLS)
+  for TERM_STATUS IN ('ALLOWED','TERMINATED')
+  )
+" shortnames=t
+| table *
+| rename 'ALLOWED' as allowed 'TERMINATED' as terminated
+| eval total=allowed+terminated
+| eval perc_terminated=(terminated/total)*100
+| table allowed terminated total perc_terminated
